@@ -42,10 +42,17 @@ class CkanHighlevelClient(object):
         """:return: a list of dataset ids"""
         return self._client.list_datasets()
 
-    def iter_datasets(self):
-        """Generator, iterating over all the datasets in ckan"""
+    def iter_datasets(self, allow_deleted=False):
+        """
+        Generator, iterating over all the datasets in ckan
+
+        :param allow_deleted:
+            Whether to return even logically deleted objects.
+            If set to ``False`` (the default) will raise a
+            ``HTTPError(404, ..)`` if ``state != 'active'``
+        """
         for id in self.list_datasets():
-            yield self.get_dataset(id)
+            yield self.get_dataset(id, allow_deleted)
 
     def get_dataset(self, id, allow_deleted=False):
         """
@@ -105,11 +112,15 @@ class CkanHighlevelClient(object):
 
         return CkanDataset(data)
 
-    def save_dataset(self, dataset):
+    def save_dataset(self, dataset, allow_deleted=False):
         """
         If the dataset already has an id, call :py:meth:`update_dataset`,
         otherwise, call :py:meth:`create_dataset`.
 
+        :param allow_deleted:
+            Whether to update even logically deleted objects.
+            If set to ``False`` (the default) will raise a
+            ``HTTPError(404, ..)`` if ``state != 'active'``
         :return: as returned by the called function.
         :rtype: :py:class:`CkanDataset <.objects.ckan_dataset.CkanDataset>`
         """
@@ -118,7 +129,7 @@ class CkanHighlevelClient(object):
             raise TypeError("Dataset must be a CkanDataset")
 
         if dataset.id is not None:
-            return self.update_dataset(dataset)
+            return self.update_dataset(dataset, allow_deleted)
         return self.create_dataset(dataset)
 
     def create_dataset(self, dataset):
@@ -142,10 +153,14 @@ class CkanHighlevelClient(object):
 
         return created
 
-    def update_dataset(self, dataset):
+    def update_dataset(self, dataset, allow_deleted=False):
         """
         Update a dataset
 
+        :param allow_deleted:
+            Whether to update even logically deleted objects.
+            If set to ``False`` (the default) will raise a
+            ``HTTPError(404, ..)`` if ``state != 'active'``
         :rtype: :py:class:`CkanDataset <.objects.ckan_dataset.CkanDataset>`
         """
 
@@ -158,7 +173,7 @@ class CkanHighlevelClient(object):
         # We need the original dataset to make sure
         # we are updating things correctly.
 
-        original_dataset = self.get_dataset(dataset.id)
+        original_dataset = self.get_dataset(dataset.id, allow_deleted)
         updates_dict = dataset.serialize()
 
         # ------------------------------------------------------------
@@ -191,13 +206,20 @@ class CkanHighlevelClient(object):
         """Delete a dataset, by id"""
         self._client.delete_dataset(id)
 
-    def wipe_dataset(self, id):
-        """Actually delete a dataset, by renaming it first"""
-        dataset = self.get_dataset(id)
+    def wipe_dataset(self, id, allow_deleted=False):
+        """
+        Actually delete a dataset, by renaming it first
+
+        :param allow_deleted:
+            Whether to wipe even logically deleted objects.
+            If set to ``False`` (the default) will raise a
+            ``HTTPError(404, ..)`` if ``state != 'active'``
+        """
+        dataset = self.get_dataset(id, allow_deleted)
         chars = string.ascii_lowercase + string.digits
         dataset.name = 'deleted-{0}'.format(''.join(
             random.choice(chars) for i in xrange(10)))
-        self.update_dataset(dataset)
+        self.update_dataset(dataset, allow_deleted)
         self.delete_dataset(id)
 
     # ------------------------------------------------------------
